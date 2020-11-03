@@ -1,0 +1,1 @@
+mssql+pyodbc://172.200.10.9/SDR?driver=SQL Server
