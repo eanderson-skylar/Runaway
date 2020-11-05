@@ -26,7 +26,7 @@ from DB.DB import DbOperation
 
 spell = SpellChecker()
 
-def get_input_context(words_map, t, n_phrase, n_context, mapping):
+def get_input_context(words_map, t, n_phrase, n_context, mapping, n_cat):
     if 'clean_words' not in words_map:  # if no clean_words then just use words
         words_map['clean_words'] = words_map['words']
 
@@ -276,6 +276,8 @@ class FEModel:
     def create_tv_arrays(self, n_phrase=1, n_context=5):
         mapping = self.mapping
         data = self.data
+        n_cat = self.n_cat
+        t = self.tokenizer
 
         # seperate training/validation data by event id
         event_ids = data['event_id'].drop_duplicates().tolist()
@@ -298,7 +300,7 @@ class FEModel:
             for ad_id in ad_ids:
                 words_map = data.loc[(data['advertisement.id'] == ad_id) & (data.id > -1)].copy().reset_index(drop=True)
 
-                answer = get_input_context(words_map, t, n_phrase, n_context, mapping)
+                answer = get_input_context(words_map, t, n_phrase, n_context, mapping, n_cat)
                 x_phrase_train = np.append(x_phrase_train, answer[0], axis=0)
                 x_context_train = np.append(x_context_train, answer[1], axis=0)
                 x_char_phrase_train = np.append(x_char_phrase_train, answer[2], axis=0)
@@ -318,7 +320,7 @@ class FEModel:
             for ad_id in ad_ids:
                 words_map = data.loc[(data['advertisement.id'] == ad_id) & (data.id > -1)].copy().reset_index(drop=True)
 
-                answer = get_input_context(words_map, t, n_phrase, n_context, mapping)
+                answer = get_input_context(words_map, t, n_phrase, n_context, mapping, n_cat)
                 x_phrase_valid = np.append(x_phrase_valid, answer[0], axis=0)
                 x_context_valid = np.append(x_context_valid, answer[1], axis=0)
                 x_char_phrase_valid = np.append(x_char_phrase_valid, answer[2], axis=0)
@@ -334,12 +336,73 @@ class FEModel:
         x_char_phrase_valid_shaped = [to_categorical(x, num_classes=vocab_size) for x in x_char_phrase_valid]
         x_char_phrase_valid_shaped = array(x_char_phrase_valid_shaped)
 
-        #save arrays
+        #pack arrays
         self.x_dict = {'x_phrase_train': x_phrase_train, 'x_context_train': x_context_train,
                            'x_char_phrase_train_shaped': x_char_phrase_train_shaped, 'x_phrase_valid': x_phrase_valid,
                            'x_context_valid': x_context_valid, 'x_char_phrase_valid_shaped': x_char_phrase_valid_shaped}
         self.y_dict = {'y_train': y_train, 'y_group_train': y_group_train, 'y_gender_cat_train': y_gender_cat_train,
                        'y_valid': y_valid, 'y_group_valid': y_group_valid, 'y_gender_cat_valid': y_gender_cat_valid}
+
+    def train(self):
+        #unpack arrays
+        x_dict = self.x_dict
+        y_dict = self.y_dict
+        locals().update(x_dict)
+        locals().update(y_dict)
+
+        # model
+        callbacks = [
+            keras.callbacks.ModelCheckpoint(
+                filepath="./Save Models/" + model_name + ".h5",
+                monitor="val_y_accuracy",
+                save_best_only=True,
+            )
+        ]
+
+        sequence_input_phrase = Input(shape=(None,), dtype='int32')
+        embedded_sequences_phrase = embedding_layer(sequence_input_phrase)
+        x_p = Bidirectional(LSTM(64, dropout=0.2, recurrent_dropout=0.2))(embedded_sequences_phrase)
+        x_p = Dense(32, activation='relu')(x_p)
+
+        sequence_input_context = Input(shape=(None,), dtype='int32')
+        embedded_sequences_context = embedding_layer(sequence_input_context)
+        x_c = Bidirectional(LSTM(64, dropout=0.2, recurrent_dropout=0.2))(embedded_sequences_context)
+        x_c = Dense(32, activation='relu')(x_c)
+
+        input_char_phrase = Input(shape=(x_char_phrase_valid_shaped.shape[1], x_char_phrase_valid_shaped.shape[2],))
+        x_cp = Bidirectional(LSTM(64, dropout=0.25, recurrent_dropout=0.3))(input_char_phrase)  # from 64, .2
+        x_cp = Dense(32, activation='relu')(x_cp)  # from 32
+
+        merged = keras.layers.concatenate([x_p, x_c, x_cp], axis=-1)
+        x = Dense(128, activation='relu')(merged)
+        x = Dropout(.15)(x)  # from .15
+        x = Dense(64, activation='relu')(x)
+        x = Dropout(.15)(x)
+        x = Dense(32, activation='relu')(x)
+
+        prediction = Dense(n_cat, activation='softmax', name='y')(x)
+        prediction_group = Dense(1, activation='sigmoid', name='y_group')(x)
+        prediction_gender = Dense(3, activation='softmax', name='y_gender')(x)
+
+        model = Model([sequence_input_phrase, sequence_input_context, input_char_phrase],
+                      [prediction, prediction_group, prediction_gender])
+
+        # try using different optimizers and different optimizer configs
+        optimizer = optimizers.Adam(lr=0.001)
+        lossWeights = [1, 1, 2]  # from [1,1,2]
+        model.compile(loss=['categorical_crossentropy', 'binary_crossentropy', 'categorical_crossentropy'],
+                      optimizer=optimizer,
+                      loss_weights=lossWeights,
+                      metrics=['accuracy'])
+
+        batch_size = 128
+        model.fit([x_phrase_train, x_context_train, x_char_phrase_train_shaped],
+                  [y_train, y_group_train, y_gender_cat_train],
+                  batch_size=batch_size,
+                  epochs=20,
+                  validation_data=([x_phrase_valid, x_context_valid, x_char_phrase_valid_shaped],
+                                   [y_valid, y_group_valid, y_gender_cat_valid]),
+                  callbacks=callbacks)
 
 if __name__ == "__main__":
     model = FEModel(model_name='Ad Runaway_all_feature v7')
@@ -347,3 +410,4 @@ if __name__ == "__main__":
     model.create_character_mapping()
     model.import_training_data()
     model.create_tv_arrays()
+    model.train()
