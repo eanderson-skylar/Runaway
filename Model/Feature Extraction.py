@@ -22,6 +22,7 @@ import re
 import pyodbc
 import urllib
 
+from DB.DB import DbOperation
 
 def get_input_context(words_map, t, n_phrase, n_context, mapping):
     if 'clean_words' not in words_map:  # if no clean_words then just use words
@@ -121,3 +122,47 @@ def create_empty_words_map(words):
 
 class FEModel:
     def __init__(self):
+        self.tokenizer = None
+        self.db = DbOperation()
+
+    def create_tokenizer(self):
+        # create tokenizer
+
+        t = Tokenizer()
+        transcripts = self.db.query_table(sql_query="select transcript from run_ad_complete")
+        t.fit_on_texts(transcripts['transcript'])
+        max_features = len(t.word_counts) + 1
+        word_index = t.word_index
+
+        # prepare pretrained embedding layer
+        embeddings_index = {}
+        f = open(os.path.join('./GloVe/', 'glove.6B.100d.txt'), encoding="utf8")
+        for line in f:
+            values = line.split()
+            word = values[0]
+            coefs = np.asarray(values[1:], dtype='float32')
+            embeddings_index[word] = coefs
+        f.close()
+
+        print('Found %s word vectors.' % len(embeddings_index))
+
+        # calculate embedding matrix
+        EMBEDDING_DIM = 100  # update embedding dim if Glove weights are changed
+        MAX_SEQUENCE_LENGTH = 1000
+        embedding_matrix = np.zeros((len(word_index) + 1, EMBEDDING_DIM))
+        for word, i in word_index.items():
+            embedding_vector = embeddings_index.get(word)
+            if embedding_vector is not None:
+                # words not found in embedding index will be all-zeros.
+                embedding_matrix[i] = embedding_vector
+
+                # Hey MTV Cribs, this is where the magic happens
+        embedding_layer = Embedding(len(word_index) + 1,
+                                    EMBEDDING_DIM,
+                                    weights=[embedding_matrix],
+                                    input_length=MAX_SEQUENCE_LENGTH,
+                                    trainable=False)
+
+if __name__ == "__main__":
+    model = FEModel()
+    model.create_tokenizer()
