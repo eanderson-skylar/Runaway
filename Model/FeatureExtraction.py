@@ -25,6 +25,7 @@ import urllib
 from DB.DB import DbOperation
 
 spell = SpellChecker()
+dirname = os.path.dirname(__file__)
 
 def get_input_context(words_map, t, n_phrase, n_context, mapping, n_cat):
     if 'clean_words' not in words_map:  # if no clean_words then just use words
@@ -133,7 +134,7 @@ class FEModel:
         self.db = DbOperation()
 
         # get cat table
-        self.cat = pd.read_csv("./Cat Table.csv")
+        self.cat = pd.read_csv(os.path.join(dirname, "./Cat Table.csv"))
 
         # set number of categories (always +1 for cat 0)
         self.n_cat = self.cat.loc[self.cat.cat >= 0].shape[0]
@@ -157,7 +158,7 @@ class FEModel:
 
         # prepare pretrained embedding layer
         embeddings_index = {}
-        f = open(os.path.join('./GloVe/', 'glove.6B.100d.txt'), encoding="utf8")
+        f = open(os.path.join(dirname, './GloVe/glove.6B.100d.txt'), encoding="utf8")
         for line in f:
             values = line.split()
             word = values[0]
@@ -198,10 +199,10 @@ class FEModel:
         self.mapping = mapping
 
         #save
-        with open('./Save Models/' + model_name + ' tokenizer.pickle',
+        with open(os.path.join(dirname, './Save Models/' + model_name + ' tokenizer.pickle'),
                   'wb') as handle:  # save tokenizer
             pickle.dump(t, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        with open('./Save Models/' + model_name + ' mapping.pickle',
+        with open(os.path.join(dirname, './Save Models/' + model_name + ' mapping.pickle'),
                   'wb') as handle:  # save mapping
             pickle.dump(mapping, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -344,6 +345,8 @@ class FEModel:
                        'y_valid': y_valid, 'y_group_valid': y_group_valid, 'y_gender_cat_valid': y_gender_cat_valid}
 
     def train(self):
+        model_name = self.model_name
+
         #unpack arrays
         x_dict = self.x_dict
         y_dict = self.y_dict
@@ -353,7 +356,7 @@ class FEModel:
         # model
         callbacks = [
             keras.callbacks.ModelCheckpoint(
-                filepath="./Save Models/" + model_name + ".h5",
+                filepath=os.path.join(dirname, "./Save Models/" + model_name + ".h5"),
                 monitor="val_y_accuracy",
                 save_best_only=True,
             )
