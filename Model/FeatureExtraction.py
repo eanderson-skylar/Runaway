@@ -346,6 +346,8 @@ class FEModel:
 
     def train(self):
         model_name = self.model_name
+        embedding_layer = self.embedding_layer
+        n_cat = self.n_cat
 
         #unpack arrays
         x_dict = self.x_dict
@@ -402,7 +404,7 @@ class FEModel:
         model.fit([x_phrase_train, x_context_train, x_char_phrase_train_shaped],
                   [y_train, y_group_train, y_gender_cat_train],
                   batch_size=batch_size,
-                  epochs=20,
+                  epochs=5,
                   validation_data=([x_phrase_valid, x_context_valid, x_char_phrase_valid_shaped],
                                    [y_valid, y_group_valid, y_gender_cat_valid]),
                   callbacks=callbacks)

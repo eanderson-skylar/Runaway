@@ -2,8 +2,6 @@
 # v4 also improved run_id assignment logic
 # v5 simplfied run_num logic, improved create run ids logic to use alias instead of unknwon when available, added age and height validation, moved to_inch to module
 
-local = True
-
 import keras
 from keras.preprocessing import sequence
 from keras.models import Sequential, Model, load_model
@@ -42,8 +40,7 @@ from Support.EnslaverName import EnslaverName
 from Support.AdType import AdType
 from Support.to_inch import to_inch
 
-
-# Objects ----------------------------------------------------------------
+dirname = os.path.dirname(__file__)
 
 class Ad():
     def __init__(self):
@@ -51,7 +48,7 @@ class Ad():
         self.text = None
         self.words = pd.DataFrame(columns=['id', 'words'])
         self.clean_words = pd.DataFrame(columns=['id', 'clean_words'])
-        self.cat = None
+        self.cat = pd.read_csv(os.path.join(dirname, "../Model/Cat Table.csv"))
 
     # splits and cleans words
     def split_words(self, tran):
@@ -817,4 +814,5 @@ class Runaway():
         return to_inch(input)
 
 if __name__ == "__main__":
+    ad = Feature(n_phrase=1, n_context=5)
     pass
